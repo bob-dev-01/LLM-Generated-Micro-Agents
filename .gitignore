@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Project runtime artifacts
+data/
+reports/
+*.db
+*.jsonl
+
+# Env / secrets
+.env

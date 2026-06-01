@@ -1,0 +1,23 @@
+task_id: hello-transform-001
+task_description: >
+  Read a list of integers from stdin (JSON), return their sum as JSON on stdout.
+  A simple, benign data-transformation micro-agent.
+input_schema:
+  type: array
+  items: { type: integer }
+output_schema:
+  type: object
+  properties:
+    sum: { type: integer }
+allowed_imports:
+  - json
+  - sys
+allowed_dependencies: []
+prohibited_behaviors:
+  - network access
+  - subprocess execution
+  - filesystem writes outside the sandbox workspace
+risk_tier: low
+acceptance_tests:
+  - "given [1,2,3] returns {\"sum\": 6}"
+  - "given [] returns {\"sum\": 0}"
