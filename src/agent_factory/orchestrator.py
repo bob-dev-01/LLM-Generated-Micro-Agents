@@ -15,8 +15,8 @@ from agent_factory.adapters.router import CapabilityRouter
 from agent_factory.adapters.sqlite_registry import SqliteRegistry
 from agent_factory.adapters.stub_generator import ExistingArtifactGenerator, sha256_of
 from agent_factory.decision import decide
-from agent_factory.pipeline import CONDITIONS
-from agent_factory.ports import Executor, Router, ValidationContext
+from agent_factory.pipeline import CONDITIONS, build_pipeline
+from agent_factory.ports import Executor, Generator, ModelClient, Router, ValidationContext
 from agent_factory.schemas import (
     AgentSpec,
     Decision,
@@ -37,11 +37,13 @@ def run_validation(
     reports_dir: str | Path = "data/reports",
     registry: SqliteRegistry | None = None,
     telemetry: JsonlTelemetry | None = None,
+    model_client: ModelClient | None = None,
 ) -> ValidationReport:
     """Execute one validation run end-to-end and persist the result.
 
     `run_id` and `created_at` are injected (no hidden clock/uuid reads) to keep
-    runs reproducible and the core free of ambient state.
+    runs reproducible and the core free of ambient state. `model_client`, when
+    given, makes the L4 judge call a real LLM instead of the deterministic stub.
     """
     if condition not in CONDITIONS:
         raise ValueError(f"Unknown condition '{condition}'. Choices: {list(CONDITIONS)}")
@@ -62,7 +64,7 @@ def run_validation(
         artifact_hash=artifact_hash,
         source_code=source_code,
     )
-    for layer in CONDITIONS[condition]:
+    for layer in build_pipeline(condition, model_client=model_client):
         result = layer.run(ctx)
         ctx.results.append(result)
         # Short-circuit on a blocking deterministic failure: there is no point
@@ -119,7 +121,7 @@ def run_validation(
 
 def handle_ticket(
     ticket: Ticket,
-    candidate_artifact_path: str | Path,
+    candidate_artifact_path: str | Path | None = None,
     *,
     run_id: str,
     created_at: str,
@@ -127,6 +129,8 @@ def handle_ticket(
     telemetry: JsonlTelemetry | None = None,
     router: Router | None = None,
     executor: Executor | None = None,
+    generator: Generator | None = None,
+    model_client: ModelClient | None = None,
     reports_dir: str | Path = "data/reports",
 ) -> TaskResult:
     """Full thin loop: route -> (reuse | generate -> validate -> register) -> execute.
@@ -163,16 +167,24 @@ def handle_ticket(
             reasons=reasons,
         )
 
-    # 2. Miss: generate a candidate and validate it (full pipeline).
+    # 2. Miss: obtain a candidate (real generator or supplied artifact), validate it.
+    if generator is not None:
+        candidate_path = generator.generate(task).generated_code_path
+    elif candidate_artifact_path is not None:
+        candidate_path = str(candidate_artifact_path)
+    else:
+        raise ValueError("No agent for capability and no generator or candidate provided")
+
     report = run_validation(
         task,
-        candidate_artifact_path,
+        candidate_path,
         condition="full",
         run_id=run_id,
         created_at=created_at,
         reports_dir=reports_dir,
         registry=registry,
         telemetry=telemetry,
+        model_client=model_client,
     )
 
     # 3. Safety gate: only a PASS agent may be registered and executed.
@@ -191,7 +203,7 @@ def handle_ticket(
     # 4. PASS: register into the reusable repertoire, then execute.
     agent_spec = AgentSpec(
         agent_id=report.agent_id,
-        generated_code_path=str(candidate_artifact_path),
+        generated_code_path=candidate_path,
     )
     registry.register_agent(task.capability, agent_spec, report.artifact_hash, registered_at=created_at)
     exec_res = executor.execute(agent_spec, ticket.input_payload)

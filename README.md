@@ -226,7 +226,7 @@ A **quantitative controlled benchmark**: the same curated artifact corpus is run
 |---|---|---|---|
 | Language & schemas | Python 3.11+, Pydantic v2 | Implementation + schema validation | **Mandatory** |
 | Agent harness | AutoGen AgentChat (pinned) | Thin generator/orchestrator harness | **Mandatory** |
-| Model endpoint | OpenAI-compatible w/ structured outputs | Generation + structured-output judge (Azure OpenAI if provisioned) | **Mandatory** |
+| Model endpoint | Anthropic Claude (implemented) via `ModelClient` port; OpenAI-compatible / Azure OpenAI are drop-in alternatives | Generation + structured-output judge | **Mandatory** |
 | Static analysis | Bandit + custom AST rules | Detect dangerous Python patterns | **Mandatory** |
 | Dependency/security audit | pip-audit, pinned reqs, hash enforcement | Vulnerable-dep detection, supply-chain risk | **Mandatory** |
 | Policy engine | YAML policy + deterministic Python checker | Allow/denylist for imports, deps, tools, network, fs | **Mandatory** |

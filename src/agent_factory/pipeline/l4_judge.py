@@ -1,12 +1,12 @@
-"""Layer 4 - LLM-as-a-Judge (walking-skeleton stub).
+"""Layer 4 - LLM-as-a-Judge.
 
-Structural stub: returns a deterministic, high-confidence JudgeResult so no LLM
-key or budget is needed for the skeleton. The full MVP sends ONLY sanitized,
-structured evidence (never raw code, ADR-005) to an OpenAI-compatible endpoint
-with structured outputs, behind the ModelClient port.
+Receives ONLY sanitized, structured evidence (never raw code, ADR-005) and
+returns a structured verdict. If a ModelClient is injected, it calls a real LLM
+(Anthropic Claude with structured output); otherwise it falls back to a
+deterministic high-confidence stub so the pipeline runs with no key/budget.
 
-Critically: even here the judge is advisory. The deterministic-first decision
-function (decision.py) ensures the judge can never overturn a blocking FAIL.
+Critically, the judge is advisory: the deterministic-first decision function
+(decision.py) guarantees it can never overturn a blocking deterministic FAIL.
 """
 
 from __future__ import annotations
@@ -18,13 +18,14 @@ from agent_factory.schemas import JudgeResult, LayerResult
 
 
 def _sanitize_evidence(ctx: ValidationContext) -> dict:
-    """Build the sanitized evidence pack the real judge will receive (ADR-005).
+    """Build the sanitized evidence pack the judge receives (ADR-005).
 
     Deliberately excludes raw source code; only structured findings + metrics.
     """
     return {
         "task_description": ctx.task_spec.task_description,
         "risk_tier": ctx.task_spec.risk_tier.value,
+        "prohibited_behaviors": ctx.task_spec.prohibited_behaviors,
         "deterministic_findings": [
             {"rule_id": f.rule_id, "severity": f.severity, "message": f.message}
             for r in ctx.results
@@ -35,24 +36,29 @@ def _sanitize_evidence(ctx: ValidationContext) -> dict:
 
 
 class JudgeLayer:
-    """L4 - structured-output LLM judge. STUB (no model call)."""
+    """L4 - structured-output LLM judge (real if a ModelClient is given)."""
 
     name = "L4_judge"
 
+    def __init__(self, model_client=None) -> None:
+        self.model_client = model_client
+
     def run(self, ctx: ValidationContext) -> LayerResult:
         start = time.perf_counter()
-        _ = _sanitize_evidence(ctx)  # exercised now; sent to model in POC-1
+        evidence = _sanitize_evidence(ctx)
 
-        # TODO(POC-1): ModelClient.judge(evidence) -> JudgeResult (structured output).
-        judge = JudgeResult(
-            correctness_score=0.95,
-            safety_risk="info",
-            decision="pass",
-            uncertain=False,
-            reasons=["stub judge: high-confidence pass (no model call in skeleton)"],
-        )
+        if self.model_client is not None:
+            judge = self.model_client.judge(evidence)
+        else:
+            judge = JudgeResult(
+                correctness_score=0.95,
+                safety_risk="info",
+                decision="pass",
+                uncertain=False,
+                reasons=["stub judge: high-confidence pass (no model call)"],
+            )
+
         ctx.judge_result = judge
-
         status = "escalate" if judge.uncertain else judge.decision
         return LayerResult(
             layer=self.name,

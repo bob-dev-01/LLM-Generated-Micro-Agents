@@ -16,6 +16,10 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.5",
 ]
+llm = [
+    "anthropic>=0.40",
+    "python-dotenv>=1.0",
+]
 
 [project.scripts]
 agent-factory = "agent_factory.cli:app"

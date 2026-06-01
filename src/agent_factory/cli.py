@@ -37,11 +37,21 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _build_judge(use_llm: bool):
+    """Construct the real Anthropic judge if requested, else None (stub judge)."""
+    if not use_llm:
+        return None
+    from agent_factory.adapters.anthropic_client import AnthropicJudge
+
+    return AnthropicJudge()
+
+
 @app.command()
 def run(
     task: Path = typer.Option(..., exists=True, help="Path to a TaskSpec YAML file."),
     agent: Path = typer.Option(..., exists=True, help="Path to the Python artifact."),
     condition: str = typer.Option("full", help=f"One of {list(CONDITIONS)}."),
+    judge: bool = typer.Option(False, "--judge", help="Use the real Anthropic LLM judge."),
 ) -> None:
     """Validate one artifact under one condition and print the decision."""
     task_spec = _load_task(task)
@@ -51,6 +61,7 @@ def run(
         condition=condition,
         run_id=uuid.uuid4().hex[:12],
         created_at=_now_iso(),
+        model_client=_build_judge(judge),
     )
 
     typer.echo("")
@@ -104,20 +115,32 @@ def bench(
 def ticket(
     task: Path = typer.Option(..., exists=True, help="Path to a TaskSpec YAML file."),
     candidate: Path = typer.Option(
-        ..., exists=True, help="Artifact the generator would produce on a routing miss."
+        None, exists=True, help="Pre-written artifact to use on a routing miss (omit with --generate)."
     ),
     input: str = typer.Option("null", help="Input payload as a JSON string, e.g. '[1,2,3]'."),
+    generate: bool = typer.Option(False, "--generate", help="Generate the agent with Anthropic Claude."),
+    judge: bool = typer.Option(False, "--judge", help="Use the real Anthropic LLM judge."),
 ) -> None:
     """Full loop: route -> (reuse | generate -> validate -> register) -> execute."""
     task_spec = _load_task(task)
     payload = json.loads(input)
     tk = Ticket(ticket_id=uuid.uuid4().hex[:12], task=task_spec, input_payload=payload)
 
+    generator = None
+    if generate:
+        from agent_factory.adapters.anthropic_generator import AnthropicGenerator
+
+        generator = AnthropicGenerator()
+    elif candidate is None:
+        raise typer.BadParameter("Provide --candidate or use --generate.")
+
     result = handle_ticket(
         tk,
         candidate,
         run_id=uuid.uuid4().hex[:12],
         created_at=_now_iso(),
+        generator=generator,
+        model_client=_build_judge(judge),
     )
 
     route = "REUSED existing agent" if result.reused else "GENERATED new agent"

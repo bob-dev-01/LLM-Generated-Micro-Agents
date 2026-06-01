@@ -77,10 +77,37 @@ $PY -m agent_factory.cli ticket --task examples/danger_task.yaml \
 | L1 Static | **Real** | AST scan (`eval/exec/os.system/subprocess/socket/ctypes`). POC-1 adds Bandit + richer rules. |
 | L2 Policy | **Real** | YAML policy (`policies/default.yaml`): per-task import allowlist + global denylist + supply-chain (pinning, VCS/URL, allow/deny). Optional pip-audit is off by default (needs network). |
 | L3 Sandbox | **Real** | Hardened Docker runner (`--network=none`, `--cap-drop=ALL`, read-only + tmpfs, non-root, mem/cpu/pids limits, timeout). Degrades to `skip` if Docker is unavailable. |
-| L4 Judge | Stub | Deterministic high-confidence pass; sanitized-evidence pack already built. POC-1 wires a real model call via `ModelClient` (needs LLM endpoint). |
+| L4 Judge | **Real (opt-in)** | Anthropic Claude via `ModelClient` (structured output). Falls back to a deterministic stub when no client is injected, so offline runs still work. |
 
-Deterministic layers (L1+L2+L3) are now real; only the LLM judge (L4) remains a
-stub. Deepening it is "fill in behind the interface," not re-architecting.
+All four layers can now run for real. The judge (L4) and real agent generation
+use the Anthropic API behind the `ModelClient` / `Generator` ports.
+
+## LLM mode (Anthropic) — optional
+
+Real judging and generation need the `llm` extra and an API key:
+
+```bash
+uv pip install --python .venv/Scripts/python.exe -e ".[dev,llm]"   # Windows
+setx ANTHROPIC_API_KEY "sk-ant-..."        # or put it in a .env file (gitignored)
+# optional, to save budget — default is claude-opus-4-8:
+setx ANTHROPIC_MODEL "claude-haiku-4-5"
+```
+
+```bash
+PY=.venv/Scripts/python.exe
+# Validate an existing artifact with the REAL Claude judge:
+$PY -m agent_factory.cli run --task examples/hello_task.yaml \
+    --agent examples/agents/hello_agent.py --judge
+
+# Full loop with REAL generation + REAL judge (no --candidate needed):
+$PY -m agent_factory.cli ticket --task examples/hello_task.yaml \
+    --generate --judge --input "[1,2,3,4]"
+```
+
+> **Cost note:** the judge is invoked only in the `full` condition. With Haiku 4.5 a
+> judge call is well under a cent; with Opus 4.8 it is a few cents. Set
+> `ANTHROPIC_MODEL=claude-haiku-4-5` for cheap dev/benchmark runs.
+> Live LLM tests (`tests/test_llm.py`) skip automatically unless `ANTHROPIC_API_KEY` is set.
 
 > **Safety short-circuit:** if L1/L2 raise a blocking violation, the pipeline stops
 > *before* L3 — known-dangerous code is never executed in the sandbox.
