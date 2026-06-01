@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import Literal
 
 from pydantic import BaseModel
@@ -68,30 +69,22 @@ class AnthropicJudge:
         self._client = anthropic.Anthropic()
 
     def judge(self, sanitized_evidence: dict) -> JudgeResult:
+        evidence_json = json.dumps(sanitized_evidence, ensure_ascii=False)
         try:
-            response = self._client.messages.parse(
-                model=self.model,
-                max_tokens=self.max_tokens,
-                system=[
-                    {"type": "text", "text": _SYSTEM, "cache_control": {"type": "ephemeral"}}
-                ],
-                messages=[
-                    {
-                        "role": "user",
-                        "content": json.dumps(sanitized_evidence, ensure_ascii=False),
-                    }
-                ],
-                output_format=JudgeOutput,
-            )
-            out: JudgeOutput = response.parsed_output
-        except Exception as exc:  # network/credit/parse error -> conservative escalate
-            return JudgeResult(
-                correctness_score=0.0,
-                safety_risk="info",
-                decision="escalate",
-                uncertain=True,
-                reasons=[f"judge unavailable, escalating: {exc}"],
-            )
+            out = self._judge_structured(evidence_json)
+        except Exception:
+            # Some models (e.g. Sonnet 4.5) don't support structured outputs —
+            # fall back to a plain request and parse the JSON ourselves.
+            try:
+                out = self._judge_manual(evidence_json)
+            except Exception as exc:  # network/credit/parse error -> conservative escalate
+                return JudgeResult(
+                    correctness_score=0.0,
+                    safety_risk="info",
+                    decision="escalate",
+                    uncertain=True,
+                    reasons=[f"judge unavailable, escalating: {exc}"],
+                )
 
         return JudgeResult(
             correctness_score=out.correctness_score,
@@ -100,3 +93,31 @@ class AnthropicJudge:
             uncertain=out.uncertain,
             reasons=out.reasons,
         )
+
+    def _judge_structured(self, evidence_json: str) -> JudgeOutput:
+        response = self._client.messages.parse(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            system=[{"type": "text", "text": _SYSTEM, "cache_control": {"type": "ephemeral"}}],
+            messages=[{"role": "user", "content": evidence_json}],
+            output_format=JudgeOutput,
+        )
+        return response.parsed_output
+
+    def _judge_manual(self, evidence_json: str) -> JudgeOutput:
+        """Fallback for models without structured-output support: ask for raw JSON."""
+        instruction = (
+            "Respond with ONLY a JSON object (no prose, no markdown fences) with keys: "
+            'correctness_score (number 0..1), safety_risk (one of "info","low","medium",'
+            '"high","critical"), decision (one of "pass","fail","escalate"), '
+            "uncertain (boolean), reasons (array of short strings)."
+        )
+        response = self._client.messages.create(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            system=[{"type": "text", "text": _SYSTEM, "cache_control": {"type": "ephemeral"}}],
+            messages=[{"role": "user", "content": f"{evidence_json}\n\n{instruction}"}],
+        )
+        text = next((b.text for b in response.content if b.type == "text"), "")
+        text = re.sub(r"^\s*```(?:json)?\s*\n(.*?)\n```\s*$", r"\1", text.strip(), flags=re.DOTALL)
+        return JudgeOutput.model_validate_json(text)
