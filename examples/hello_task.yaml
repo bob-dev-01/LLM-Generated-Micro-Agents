@@ -20,6 +20,8 @@ prohibited_behaviors:
   - filesystem writes outside the sandbox workspace
 risk_tier: low
 acceptance_tests:
-  - "given [1,2,3] returns {\"sum\": 6}"
-  - "given [] returns {\"sum\": 0}"
+  - input: [1, 2, 3]
+    expected_output: { sum: 6 }
+  - input: []
+    expected_output: { sum: 0 }
 sample_input: [1, 2, 3]

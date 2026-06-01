@@ -52,6 +52,17 @@ $PY -m agent_factory.cli ticket --task examples/danger_task.yaml \
 > Routing here is an exact `capability` match; execution runs locally only because the agent
 > already passed validation (in production it routes through the L3 sandbox).
 
+## Benchmark over the labeled corpus
+
+```bash
+PY=.venv/Scripts/python.exe
+$PY scripts/run_benchmark.py            # stub judge — free, no API calls
+$PY scripts/run_benchmark.py --llm      # real Claude judge in the 'full' condition
+```
+
+Runs the 8-artifact corpus (`corpus/manifest.yaml`) under all three conditions and
+writes [`BENCHMARK.md`](BENCHMARK.md) + `benchmark_results.json` with UAR / acceptance metrics.
+
 ## What to look at
 
 | Output | Demonstrates |

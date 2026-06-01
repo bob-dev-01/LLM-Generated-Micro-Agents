@@ -1,7 +1,8 @@
 """Layer 3 - Sandboxed Execution (hardened Docker runner).
 
-Executes the agent inside a locked-down container and records what actually
-happened. Hardening flags (auditable, on purpose):
+Executes the agent inside a locked-down container and, when the task declares
+acceptance tests, runs each one and checks the output. Hardening flags
+(auditable, on purpose):
 
     --network=none                  no network egress (exfiltration containment)
     --cap-drop=ALL                  drop all Linux capabilities
@@ -13,8 +14,8 @@ happened. Hardening flags (auditable, on purpose):
     host-enforced wall-clock timeout
 
 The agent source is passed via an environment variable and written to the
-tmpfs at runtime; the task's `sample_input` is fed on stdin. If Docker is not
-available, the layer degrades to `skip` (non-blocking) so the pipeline still
+tmpfs at runtime; each test's input is fed on stdin. If Docker is not
+available the layer degrades to `skip` (non-blocking) so the pipeline still
 completes - it never executes untrusted code outside the sandbox.
 """
 
@@ -31,6 +32,7 @@ from agent_factory.schemas import Finding, LayerResult, SandboxResult
 
 _DEFAULT_IMAGE = "python:3.13-slim"
 _RUN_SCRIPT = 'printf "%s" "$AGENT_CODE" > /tmp/agent.py && python /tmp/agent.py'
+_MAX_CASES = 5  # cap docker runs per validation
 
 
 def _docker_available() -> bool:
@@ -48,7 +50,7 @@ def _docker_available() -> bool:
 
 
 class SandboxLayer:
-    """L3 - hardened container execution."""
+    """L3 - hardened container execution + acceptance-test checking."""
 
     name = "L3_sandbox"
 
@@ -84,26 +86,12 @@ class SandboxLayer:
             "sh", "-c", _RUN_SCRIPT,
         ]
 
-    def run(self, ctx: ValidationContext) -> LayerResult:
-        start = time.perf_counter()
-
-        if not _docker_available():
-            return self._result(
-                "skip", False,
-                [Finding(rule_id="SBX-NO-DOCKER",
-                         message="Docker unavailable; sandbox execution skipped",
-                         severity="info")],
-                start,
-            )
-
-        payload = ctx.task_spec.sample_input
-        stdin_data = json.dumps(payload) if payload is not None else ""
-        container_name = f"afsbx_{ctx.artifact_hash[:16]}"
-        env = {**os.environ, "AGENT_CODE": ctx.source_code}
-
+    def _run_once(self, code: str, stdin_data: str, name: str):
+        """Returns (exit_code, stdout, stderr, timed_out)."""
+        env = {**os.environ, "AGENT_CODE": code}
         try:
             proc = subprocess.run(
-                self._docker_cmd(container_name),
+                self._docker_cmd(name),
                 input=stdin_data,
                 capture_output=True,
                 text=True,
@@ -111,48 +99,91 @@ class SandboxLayer:
                 env=env,
             )
         except subprocess.TimeoutExpired:
-            subprocess.run(["docker", "kill", container_name], capture_output=True)  # best effort
-            wall = (time.perf_counter() - start) * 1000
-            ctx.sandbox_result = SandboxResult(
-                executed=True, timed_out=True, wall_time_ms=wall,
-                violations=["wall-clock timeout"],
-            )
+            subprocess.run(["docker", "kill", name], capture_output=True)  # best effort
+            return None, "", "timeout", True
+        return proc.returncode, proc.stdout, proc.stderr, False
+
+    def run(self, ctx: ValidationContext) -> LayerResult:
+        start = time.perf_counter()
+
+        if not _docker_available():
             return self._result(
-                "fail", False,
-                [Finding(rule_id="SBX-TIMEOUT",
-                         message=f"Execution exceeded {self.timeout_s}s wall-clock limit",
-                         severity="high")],
-                start,
-            )
-        except Exception as exc:  # infrastructure error -> degrade, do not crash the pipeline
-            return self._result(
-                "skip", False,
-                [Finding(rule_id="SBX-ERROR",
-                         message=f"Sandbox infrastructure error; skipped: {exc}",
+                ctx, "skip", False,
+                [Finding(rule_id="SBX-NO-DOCKER",
+                         message="Docker unavailable; sandbox execution skipped",
                          severity="info")],
-                start,
+                start, SandboxResult(),
             )
 
+        code = ctx.source_code
+        tests = ctx.task_spec.acceptance_tests[:_MAX_CASES]
+        if tests:
+            cases = [(t.input, t.expected_output, True) for t in tests]
+        elif ctx.task_spec.sample_input is not None:
+            cases = [(ctx.task_spec.sample_input, None, False)]
+        else:
+            cases = [(None, None, False)]
+
+        findings: list[Finding] = []
+        passed_checks = 0
+        checked = 0
+        last_exit: int | None = None
+
+        for i, (payload, expected, is_check) in enumerate(cases):
+            stdin_data = "" if payload is None else json.dumps(payload)
+            name = f"afsbx_{ctx.artifact_hash[:12]}_{i}"
+            exit_code, stdout, stderr, timed_out = self._run_once(code, stdin_data, name)
+
+            if timed_out:
+                wall = (time.perf_counter() - start) * 1000
+                sandbox = SandboxResult(executed=True, timed_out=True, wall_time_ms=wall,
+                                        violations=["wall-clock timeout"])
+                return self._result(
+                    ctx, "fail", False,
+                    [Finding(rule_id="SBX-TIMEOUT",
+                             message=f"Execution exceeded {self.timeout_s}s wall-clock limit",
+                             severity="high")],
+                    start, sandbox,
+                )
+
+            last_exit = exit_code
+            if exit_code != 0:
+                sandbox = SandboxResult(executed=True, exit_code=exit_code,
+                                        acceptance_tests_passed=False if is_check else None)
+                return self._result(
+                    ctx, "escalate", False,
+                    [Finding(rule_id="SBX-NONZERO-EXIT",
+                             message=f"Agent exited {exit_code}: {(stderr or '').strip()[:200]}",
+                             severity="medium")],
+                    start, sandbox,
+                )
+
+            if is_check:
+                checked += 1
+                if _output_matches(stdout, expected):
+                    passed_checks += 1
+                else:
+                    findings.append(Finding(
+                        rule_id="SBX-ACCEPTANCE-FAIL",
+                        message=f"Test {i}: expected {expected!r}, got {stdout.strip()[:120]!r}",
+                        severity="high",
+                        blocking=True,
+                    ))
+
+        acceptance_passed = (checked > 0 and passed_checks == checked) if checked else None
         wall = (time.perf_counter() - start) * 1000
-        ctx.sandbox_result = SandboxResult(
-            executed=True,
-            exit_code=proc.returncode,
-            timed_out=False,
-            wall_time_ms=wall,
-            network_attempted=False,
+        sandbox = SandboxResult(
+            executed=True, exit_code=last_exit, timed_out=False,
+            wall_time_ms=wall, network_attempted=False,
+            acceptance_tests_passed=acceptance_passed,
         )
 
-        if proc.returncode == 0:
-            return self._result("pass", False, [], start)
-        return self._result(
-            "escalate", False,
-            [Finding(rule_id="SBX-NONZERO-EXIT",
-                     message=f"Agent exited {proc.returncode}: {(proc.stderr or '').strip()[:200]}",
-                     severity="medium")],
-            start,
-        )
+        if any(f.blocking for f in findings):
+            return self._result(ctx, "fail", True, findings, start, sandbox)  # functional FAIL
+        return self._result(ctx, "pass", False, [], start, sandbox)
 
-    def _result(self, status, blocking, findings, start) -> LayerResult:
+    def _result(self, ctx, status, blocking, findings, start, sandbox) -> LayerResult:
+        ctx.sandbox_result = sandbox
         return LayerResult(
             layer=self.name,
             status=status,
@@ -160,3 +191,12 @@ class SandboxLayer:
             findings=findings,
             timing_ms=(time.perf_counter() - start) * 1000,
         )
+
+
+def _output_matches(stdout: str, expected) -> bool:
+    """Compare the agent's stdout to the expected output, JSON-aware."""
+    text = stdout.strip()
+    try:
+        return json.loads(text) == expected
+    except json.JSONDecodeError:
+        return text == (expected if isinstance(expected, str) else json.dumps(expected))

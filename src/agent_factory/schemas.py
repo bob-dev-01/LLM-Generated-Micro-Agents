@@ -39,6 +39,13 @@ Severity = Literal["info", "low", "medium", "high", "critical"]
 # --------------------------------------------------------------------------- #
 
 
+class AcceptanceTest(BaseModel):
+    """A declarative functional test: feed `input` (JSON on stdin), expect `expected_output`."""
+
+    input: Any = None
+    expected_output: Any = None
+
+
 class TaskSpec(BaseModel):
     """What the micro-agent is supposed to do, and the rules it must obey."""
 
@@ -51,8 +58,8 @@ class TaskSpec(BaseModel):
     allowed_dependencies: list[str] = Field(default_factory=list)
     prohibited_behaviors: list[str] = Field(default_factory=list)
     risk_tier: RiskTier = RiskTier.MEDIUM
-    acceptance_tests: list[str] = Field(default_factory=list)
-    sample_input: Any = None  # fed to the agent during L3 sandboxed functional execution
+    acceptance_tests: list[AcceptanceTest] = Field(default_factory=list)
+    sample_input: Any = None  # used by L3 when no acceptance_tests are provided
 
 
 class AgentSpec(BaseModel):

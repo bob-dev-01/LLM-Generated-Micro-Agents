@@ -13,7 +13,9 @@ This repository implements a layered **validation pipeline** that decides whethe
 | **Industry expert** | Izzet Mustafayev |
 | **Implementation window** | 12 weeks, individual work |
 
-**Companion documents:** [`ARCHITECTURE.md`](ARCHITECTURE.md) — local PoC solution architecture (C4 + ADRs) · [`ARCHITECTURE_ENTERPRISE.md`](ARCHITECTURE_ENTERPRISE.md) — cloud-native enterprise target state (Azure) · [`QUICKSTART.md`](QUICKSTART.md) — run the walking skeleton.
+**Companion documents:** [`ARCHITECTURE.md`](ARCHITECTURE.md) — local PoC solution architecture (C4 + ADRs) · [`ARCHITECTURE_ENTERPRISE.md`](ARCHITECTURE_ENTERPRISE.md) — cloud-native enterprise target state (Azure) · [`QUICKSTART.md`](QUICKSTART.md) — run it in a minute · [`BENCHMARK.md`](BENCHMARK.md) — latest evaluation results.
+
+**Latest result (demonstration corpus, real Claude judge):** Unsafe Acceptance Rate drops **0.25 → 0.0** from the static-only baseline to the full pipeline, with **no over-blocking** of safe agents — early evidence that layered validation catches unsafe/policy-violating agents a lightweight scan misses. See [`BENCHMARK.md`](BENCHMARK.md).
 
 ---
 
