@@ -4,7 +4,7 @@
 **Status:** Draft for technical review
 **Audience:** Technical lead / scientific advisor / industry expert
 **Author:** Bobur Yusupov
-**Version:** 0.1 · 2026-06
+**Version:** 0.1 (draft)
 
 ---
 
@@ -14,7 +14,7 @@
 |---|---|
 | Project | Design and Evaluation of an Automated Validation Pipeline for LLM-Generated Micro-Agents in Enterprise Multi-Agent Systems |
 | Phase | MVP (12-week implementation), pre-implementation architecture sign-off |
-| Related docs | `README.md` (project overview), Task 2 Technical Description (revised MVP) |
+| Related docs | `README.md` (project overview), `ARCHITECTURE_ENTERPRISE.md` (cloud target state), Task 2 Technical Description (revised MVP) |
 | Decision style | Architecture Decision Records (ADR) — see §10 |
 | Reviewers | Viktor Kauk (advisor), Izzet Mustafayev (industry expert), Technical lead |
 

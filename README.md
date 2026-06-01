@@ -1,5 +1,7 @@
 # Automated Validation Pipeline for LLM-Generated Micro-Agents
 
+[![CI](https://github.com/bob-dev-01/LLM-Generated-Micro-Agents/actions/workflows/ci.yml/badge.svg)](https://github.com/bob-dev-01/LLM-Generated-Micro-Agents/actions/workflows/ci.yml)
+
 > Design and Evaluation of an Automated Validation Pipeline for LLM-Generated Micro-Agents in Enterprise Multi-Agent Systems — **Revised MVP scope**.
 
 This repository implements a layered **validation pipeline** that decides whether a newly generated Python micro-agent is safe and correct enough to be registered or executed. A single linear workflow takes a task specification and a generated agent artifact, runs four validation layers, and emits a structured decision: **PASS / FAIL / ESCALATE**.
@@ -9,8 +11,9 @@ This repository implements a layered **validation pipeline** that decides whethe
 | **Student** | Bobur Yusupov |
 | **Scientific advisor** | Viktor Kauk |
 | **Industry expert** | Izzet Mustafayev |
-| **Target date** | May 2026 |
 | **Implementation window** | 12 weeks, individual work |
+
+**Companion documents:** [`ARCHITECTURE.md`](ARCHITECTURE.md) — local PoC solution architecture (C4 + ADRs) · [`ARCHITECTURE_ENTERPRISE.md`](ARCHITECTURE_ENTERPRISE.md) — cloud-native enterprise target state (Azure) · [`QUICKSTART.md`](QUICKSTART.md) — run the walking skeleton.
 
 ---
 
