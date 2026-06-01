@@ -72,12 +72,15 @@ $PY -m agent_factory.cli ticket --task examples/danger_task.yaml \
 
 ## What is real vs stubbed in the skeleton
 
-| Layer | Skeleton | POC-1 |
+| Layer | Status | Notes |
 |---|---|---|
-| L1 Static | **Real** AST scan (`eval/exec/os.system/subprocess/socket/ctypes`) | + Bandit, richer rules |
-| L2 Policy | Stub (`pass`) | YAML allow/denylist + pip-audit on pinned+hashed deps |
-| L3 Sandbox | Stub (simulated clean run) | Hardened Docker runner (needs Docker daemon) |
-| L4 Judge | Stub (deterministic high-confidence pass; sanitized-evidence pack already built) | Real model call via `ModelClient` (needs LLM endpoint) |
+| L1 Static | **Real** | AST scan (`eval/exec/os.system/subprocess/socket/ctypes`). POC-1 adds Bandit + richer rules. |
+| L2 Policy | **Real** | YAML policy (`policies/default.yaml`): per-task import allowlist + global denylist + supply-chain (pinning, VCS/URL, allow/deny). Optional pip-audit is off by default (needs network). |
+| L3 Sandbox | **Real** | Hardened Docker runner (`--network=none`, `--cap-drop=ALL`, read-only + tmpfs, non-root, mem/cpu/pids limits, timeout). Degrades to `skip` if Docker is unavailable. |
+| L4 Judge | Stub | Deterministic high-confidence pass; sanitized-evidence pack already built. POC-1 wires a real model call via `ModelClient` (needs LLM endpoint). |
 
-The contracts, schemas, decision logic, registry, and telemetry are all real —
-deepening each layer is now "fill in behind the interface," not re-architecting.
+Deterministic layers (L1+L2+L3) are now real; only the LLM judge (L4) remains a
+stub. Deepening it is "fill in behind the interface," not re-architecting.
+
+> **Safety short-circuit:** if L1/L2 raise a blocking violation, the pipeline stops
+> *before* L3 — known-dangerous code is never executed in the sandbox.

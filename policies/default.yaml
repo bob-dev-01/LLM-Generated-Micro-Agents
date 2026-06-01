@@ -1,0 +1,21 @@
+# Deterministic policy for Layer 2 (Policy & Supply Chain).
+# Applies globally, ON TOP OF the per-task allowlists declared in each TaskSpec
+# (allowed_imports / allowed_dependencies). Edit here without touching code.
+
+imports:
+  # Top-level modules forbidden regardless of any per-task allowlist.
+  denylist:
+    - subprocess
+    - socket
+    - ctypes
+    - multiprocessing
+    - ftplib
+    - smtplib
+    - telnetlib
+    - http.client
+    - urllib.request
+
+dependencies:
+  require_pinned: true        # every requirement must be an exact pin (name==version)
+  allow_vcs_or_url: false     # forbid git+/http(s)/local-path requirement specs
+  denylist: []                # globally forbidden package names

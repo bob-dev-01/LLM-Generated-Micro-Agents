@@ -52,6 +52,7 @@ class TaskSpec(BaseModel):
     prohibited_behaviors: list[str] = Field(default_factory=list)
     risk_tier: RiskTier = RiskTier.MEDIUM
     acceptance_tests: list[str] = Field(default_factory=list)
+    sample_input: Any = None  # fed to the agent during L3 sandboxed functional execution
 
 
 class AgentSpec(BaseModel):

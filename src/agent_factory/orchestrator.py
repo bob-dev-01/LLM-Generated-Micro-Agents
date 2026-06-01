@@ -63,7 +63,13 @@ def run_validation(
         source_code=source_code,
     )
     for layer in CONDITIONS[condition]:
-        ctx.results.append(layer.run(ctx))
+        result = layer.run(ctx)
+        ctx.results.append(result)
+        # Short-circuit on a blocking deterministic failure: there is no point
+        # (and real risk) in executing untrusted code that is already known to
+        # be dangerous. This also saves L4 judge cost (ARCHITECTURE.md §8).
+        if result.blocking and result.status == "fail":
+            break
 
     # 3. Deterministic-first decision.
     final_decision, reasons = decide(ctx.results, ctx.judge_result)
