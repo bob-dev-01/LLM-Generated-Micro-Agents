@@ -26,7 +26,8 @@ from agent_factory.schemas import JudgeResult
 try:  # optional dependency: only needed when the real judge is used
     from dotenv import load_dotenv
 
-    load_dotenv()
+    # override=True so the project .env wins over a stale/empty shell var.
+    load_dotenv(override=True)
 except Exception:  # pragma: no cover - dotenv is optional
     pass
 

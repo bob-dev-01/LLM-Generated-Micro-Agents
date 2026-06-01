@@ -24,7 +24,8 @@ from agent_factory.schemas import AgentSpec, TaskSpec
 try:
     from dotenv import load_dotenv
 
-    load_dotenv()
+    # override=True so the project .env wins over a stale/empty shell var.
+    load_dotenv(override=True)
 except Exception:  # pragma: no cover
     pass
 
