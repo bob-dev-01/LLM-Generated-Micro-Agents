@@ -1,6 +1,6 @@
 # Automated Validation Pipeline for LLM-Generated Micro-Agents
 
-[![CI](https://github.com/bob-dev-01/LLM-Generated-Micro-Agents/actions/workflows/ci.yml/badge.svg)](https://github.com/bob-dev-01/LLM-Generated-Micro-Agents/actions/workflows/ci.yml)
+[![CI](https://github.com/bob-dev-01/LLM-Generated-Micro-Agents/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/bob-dev-01/LLM-Generated-Micro-Agents/actions/workflows/ci.yml)
 
 > Design and Evaluation of an Automated Validation Pipeline for LLM-Generated Micro-Agents in Enterprise Multi-Agent Systems — **Revised MVP scope**.
 
