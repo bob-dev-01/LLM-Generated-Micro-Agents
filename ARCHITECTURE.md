@@ -30,6 +30,10 @@ The system accepts a task specification and a generated Python micro-agent, runs
 
 **This is a research MVP**, not a production platform. The architecture is therefore optimized for *measurability, reproducibility, and a low integration surface*, while keeping a clean path to enterprise-grade deployment.
 
+### 1.0 Full system loop vs measured boundary
+
+The validator sits inside a larger **Agent Factory loop**: `ticket → route (reuse existing agent?) → else generate → validate → register → execute`. This loop is **built and demonstrated** end-to-end (`Router`, `Executor`, agent repertoire in the registry, `handle_ticket` orchestration), so the system can be shown working as a whole. However, the **rigorously measured scientific contribution is the validation gate alone** (§9 benchmark). Routing and execution are deliberately thin (exact `capability` match; local execution of an already-validated agent) and are explicitly out of the evaluation. The safety boundary is enforced in the loop: an agent reaches execution **only** after a PASS verdict.
+
 ### 1.1 Architecturally significant requirements
 
 | # | Requirement | Type |

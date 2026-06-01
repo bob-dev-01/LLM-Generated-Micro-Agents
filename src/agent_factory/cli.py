@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,9 +15,9 @@ from pathlib import Path
 import typer
 import yaml
 
-from agent_factory.orchestrator import run_validation
+from agent_factory.orchestrator import handle_ticket, run_validation
 from agent_factory.pipeline import CONDITIONS
-from agent_factory.schemas import Decision, TaskSpec
+from agent_factory.schemas import Decision, TaskSpec, Ticket
 
 app = typer.Typer(add_completion=False, help="LLM micro-agent validation pipeline (MVP).")
 
@@ -96,6 +97,44 @@ def bench(
             f"  {cond:<16} {report.final_decision.value:<12} {latency}",
             fg=_DECISION_COLOR[report.final_decision],
         )
+    typer.echo("")
+
+
+@app.command()
+def ticket(
+    task: Path = typer.Option(..., exists=True, help="Path to a TaskSpec YAML file."),
+    candidate: Path = typer.Option(
+        ..., exists=True, help="Artifact the generator would produce on a routing miss."
+    ),
+    input: str = typer.Option("null", help="Input payload as a JSON string, e.g. '[1,2,3]'."),
+) -> None:
+    """Full loop: route -> (reuse | generate -> validate -> register) -> execute."""
+    task_spec = _load_task(task)
+    payload = json.loads(input)
+    tk = Ticket(ticket_id=uuid.uuid4().hex[:12], task=task_spec, input_payload=payload)
+
+    result = handle_ticket(
+        tk,
+        candidate,
+        run_id=uuid.uuid4().hex[:12],
+        created_at=_now_iso(),
+    )
+
+    route = "REUSED existing agent" if result.reused else "GENERATED new agent"
+    typer.echo("")
+    typer.echo(f"  ticket        {result.ticket_id}")
+    typer.echo(f"  capability    {result.capability}")
+    typer.echo(f"  routing       {route}")
+    if result.validation_decision is not None:
+        color = _DECISION_COLOR[result.validation_decision]
+        typer.secho(f"  validation    {result.validation_decision.value}", fg=color, bold=True)
+    typer.echo(f"  executed      {result.executed}")
+    if result.executed:
+        typer.secho(f"  RESULT: {json.dumps(result.output)}", fg=typer.colors.GREEN, bold=True)
+    else:
+        typer.secho("  NOT EXECUTED (safety gate)", fg=typer.colors.RED, bold=True)
+    for r in result.reasons:
+        typer.echo(f"    - {r}")
     typer.echo("")
 
 

@@ -13,6 +13,7 @@ from typing import Protocol, runtime_checkable
 
 from agent_factory.schemas import (
     AgentSpec,
+    ExecutionResult,
     JudgeResult,
     LayerResult,
     SandboxResult,
@@ -66,12 +67,33 @@ class Sandbox(Protocol):
 
 
 @runtime_checkable
+class Router(Protocol):
+    """Decides whether a reusable agent already exists for a task (the
+    'is there already an agent for this?' step of the full loop)."""
+
+    def find_agent(self, task: TaskSpec) -> AgentSpec | None: ...
+
+
+@runtime_checkable
+class Executor(Protocol):
+    """Runs a VALIDATED agent on a ticket's input. In production this routes
+    through the same hardened sandbox as L3; the MVP runs it locally."""
+
+    def execute(self, agent: AgentSpec, input_payload: object) -> ExecutionResult: ...
+
+
+@runtime_checkable
 class Registry(Protocol):
-    """Persists decisions. Default SQLite; enterprise Cosmos/PostgreSQL adapter."""
+    """Persists decisions and the reusable agent repertoire. Default SQLite;
+    enterprise Cosmos/PostgreSQL adapter."""
 
     def save(self, report: ValidationReport) -> None: ...
 
     def get(self, artifact_hash: str) -> ValidationReport | None: ...
+
+    def register_agent(self, capability: str, agent: AgentSpec, artifact_hash: str) -> None: ...
+
+    def find_agent_by_capability(self, capability: str) -> AgentSpec | None: ...
 
 
 @runtime_checkable

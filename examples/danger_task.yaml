@@ -1,0 +1,19 @@
+task_id: config-check-001
+capability: config-check
+task_description: >
+  A task whose generated candidate turns out to be unsafe. Used to demonstrate
+  the safety gate: the agent fails validation and is therefore never executed.
+input_schema:
+  type: object
+output_schema:
+  type: object
+allowed_imports:
+  - json
+  - sys
+allowed_dependencies: []
+prohibited_behaviors:
+  - network access
+  - subprocess execution
+  - dynamic code evaluation
+risk_tier: high
+acceptance_tests: []

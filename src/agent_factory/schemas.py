@@ -44,6 +44,7 @@ class TaskSpec(BaseModel):
 
     task_id: str
     task_description: str
+    capability: str = ""  # routing key: which kind of task a reusable agent can solve
     input_schema: dict[str, Any] = Field(default_factory=dict)
     output_schema: dict[str, Any] = Field(default_factory=dict)
     allowed_imports: list[str] = Field(default_factory=list)
@@ -138,3 +139,44 @@ class ValidationReport(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     model_metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: str  # ISO-8601, injected by the orchestrator (no hidden clock reads)
+
+
+# --------------------------------------------------------------------------- #
+# Full-loop models (thin end-to-end demonstration)
+# --------------------------------------------------------------------------- #
+
+
+class Ticket(BaseModel):
+    """An incoming request: a task plus the concrete input to process."""
+
+    ticket_id: str
+    task: TaskSpec
+    input_payload: Any = None
+
+
+class ExecutionResult(BaseModel):
+    """Outcome of running a validated agent on a ticket's input."""
+
+    success: bool
+    output: Any = None
+    error: str | None = None
+    duration_ms: float = 0.0
+
+
+class TaskResult(BaseModel):
+    """End-to-end result returned for a ticket.
+
+    NOTE: the safety boundary is explicit here — `executed` is only ever True
+    for an agent whose `validation_decision` is PASS. FAIL/ESCALATE agents are
+    never executed.
+    """
+
+    ticket_id: str
+    capability: str
+    agent_id: str | None = None
+    artifact_hash: str | None = None
+    reused: bool = False  # True if served by an existing agent (no generation)
+    validation_decision: Decision | None = None
+    executed: bool = False
+    output: Any = None
+    reasons: list[str] = Field(default_factory=list)

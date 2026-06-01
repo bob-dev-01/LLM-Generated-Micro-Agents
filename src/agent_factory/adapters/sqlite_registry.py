@@ -11,7 +11,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from agent_factory.schemas import Decision, ValidationReport
+from agent_factory.schemas import AgentSpec, Decision, ValidationReport
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS validations (
@@ -24,6 +24,17 @@ CREATE TABLE IF NOT EXISTS validations (
     report_path         TEXT,
     model_metadata      TEXT,
     hmac_signature      TEXT
+);
+
+-- Reusable agent repertoire: ONLY agents that passed validation are stored
+-- here, so a routing hit is always a safe-to-execute agent.
+CREATE TABLE IF NOT EXISTS agents (
+    capability      TEXT PRIMARY KEY,
+    agent_id        TEXT NOT NULL,
+    artifact_hash   TEXT NOT NULL,
+    code_path       TEXT NOT NULL,
+    entrypoint      TEXT NOT NULL,
+    registered_at   TEXT
 );
 """
 
@@ -59,6 +70,49 @@ class SqliteRegistry:
                     None,  # HMAC signing arrives with the Key Vault adapter (optional)
                 ),
             )
+
+    def register_agent(
+        self,
+        capability: str,
+        agent: AgentSpec,
+        artifact_hash: str,
+        registered_at: str | None = None,
+    ) -> None:
+        """Add a validated agent to the reusable repertoire (keyed by capability)."""
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO agents
+                (capability, agent_id, artifact_hash, code_path, entrypoint, registered_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    capability,
+                    agent.agent_id,
+                    artifact_hash,
+                    agent.generated_code_path,
+                    agent.expected_entrypoint,
+                    registered_at,
+                ),
+            )
+
+    def find_agent_by_capability(self, capability: str) -> AgentSpec | None:
+        """Return a reusable agent for this capability, or None."""
+        if not capability:
+            return None
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT agent_id, code_path, entrypoint FROM agents WHERE capability = ?",
+                (capability,),
+            ).fetchone()
+        if row is None:
+            return None
+        return AgentSpec(
+            agent_id=row[0],
+            generated_code_path=row[1],
+            expected_entrypoint=row[2],
+            manifest={"source": "registry-reuse"},
+        )
 
     def get(self, artifact_hash: str) -> ValidationReport | None:
         with self._connect() as conn:

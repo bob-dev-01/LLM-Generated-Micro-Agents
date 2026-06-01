@@ -30,6 +30,28 @@ uv pip install --python .venv/Scripts/python.exe -e ".[dev]"   # Windows
     --task examples/hello_task.yaml --agent examples/agents/hello_agent.py
 ```
 
+## Full loop (route → reuse | generate → validate → execute)
+
+```bash
+PY=.venv/Scripts/python.exe
+
+# 1. capability "sum-integers" not yet known -> generate, validate, register, execute
+$PY -m agent_factory.cli ticket --task examples/hello_task.yaml \
+    --candidate examples/agents/hello_agent.py --input "[1,2,3,4]"      # -> {"sum": 10}
+
+# 2. same capability -> routing hit, reuse the validated agent (no re-validation)
+$PY -m agent_factory.cli ticket --task examples/hello_task.yaml \
+    --candidate examples/agents/hello_agent.py --input "[100,200]"      # -> {"sum": 300}
+
+# 3. unsafe generated agent -> FAILS validation -> NOT EXECUTED (safety gate)
+$PY -m agent_factory.cli ticket --task examples/danger_task.yaml \
+    --candidate examples/agents/evil_agent.py --input "{}"              # -> NOT EXECUTED
+```
+
+> The full loop is demonstrated, but the **measured** contribution stays the validation gate.
+> Routing here is an exact `capability` match; execution runs locally only because the agent
+> already passed validation (in production it routes through the L3 sandbox).
+
 ## What to look at
 
 | Output | Demonstrates |

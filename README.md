@@ -42,7 +42,36 @@ Enterprises face many **long-tail automation tasks**: one-off configuration-drif
 
 The **Agent Factory** idea fills this gap by generating narrowly scoped micro-agents on demand. But dynamic generation creates a solution-architecture problem: a generated agent may contain unsafe behavior, dependency risk, incorrect logic, or prompt-injection-sensitive output. An enterprise system therefore **cannot generate and execute agents directly in production** — a validation layer is required first.
 
-This project focuses exclusively on that validation layer, scoped as an **MVP-first research implementation** rather than a full production platform.
+This project implements that validation layer as its core, scoped as an **MVP-first research implementation** rather than a full production platform.
+
+### 1.1 The full system loop (demonstrated) and the measured boundary
+
+The surrounding system is the **Agent Factory loop**: a request (ticket) arrives, the system checks whether a suitable agent already exists, and either reuses it or generates a new one — and a newly generated agent is **only allowed to run after it passes validation**.
+
+```
+   Ticket / request
+        │
+        ▼
+   Router: "is there already an agent for this capability?"
+        │
+   ┌────┴─────┐
+   │ yes      │ no
+   ▼          ▼
+ Reuse      Generate new agent
+ agent          │
+   │            ▼
+   │      VALIDATION GATE  ── FAIL / ESCALATE ──► not executed
+   │      (4 layers →                              (safety boundary)
+   │       PASS/FAIL/ESCALATE)
+   │            │ PASS
+   │            ▼
+   │      Register into repertoire
+   └────┬───────┘
+        ▼
+   Execute task → result
+```
+
+> **Scope discipline.** The full loop (routing, reuse, generation, execution) is **built and demonstrated** end-to-end, but the **rigorously measured scientific contribution is the validation gate only** — routing and execution are intentionally thin and are *not* part of the benchmark. This keeps the thesis defensible: one mechanism is evaluated well, while the working loop shows how it embeds in the larger system. Try it: `agent-factory ticket ...` (see [`QUICKSTART.md`](QUICKSTART.md)).
 
 ## 2. Goal & Research Claim
 

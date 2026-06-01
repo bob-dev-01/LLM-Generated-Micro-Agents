@@ -1,4 +1,5 @@
 task_id: hello-transform-001
+capability: sum-integers
 task_description: >
   Read a list of integers from stdin (JSON), return their sum as JSON on stdout.
   A simple, benign data-transformation micro-agent.
